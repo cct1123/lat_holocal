@@ -304,31 +304,8 @@ sinth2 = np.sin(th2)
 
 # These functions define the mirror surfaces,
 # and the normal vectors on the surfaces.
-# def z1(x, y):
-#     amp = 0
-#     for ii in range(7):
-#         for jj in range(7):
-#             amp += a1[ii, jj] * ((x / R_N) ** ii) * ((y / R_N) ** jj)
-#     return amp
-
-
-# def z1(x, y):
-#     xrn = x / R_N
-#     yrn = y / R_N
-#     amp = 0.0
-#     xrn0 = 1.0
-#     yrn0 = 1.0
-#     for ii in range(0, 7):
-#         yrn0 = 1.0
-#         for jj in range(0, 7):
-#             amp += a1[ii, jj] * (xrn0) * (yrn0)
-#             yrn0 = yrn0 * yrn
-#         xrn0 = xrn0 * xrn
-#     return amp
-
 @nb.jit(nopython=True, parallel=False, fastmath=True)
 def z1(x, y):
-    num = len(x)
     xrn = x / R_N
     yrn = y / R_N
     amp = np.zeros_like(x)
@@ -342,30 +319,8 @@ def z1(x, y):
         xrn0 = xrn0 * xrn
     return amp
 
-# def z2(x, y):
-#     amp = 0
-#     for ii in range(8):
-#         for jj in range(8):
-#             amp += a2[ii, jj] * ((x / R_N) ** ii) * ((y / R_N) ** jj)
-#     return amp
-
-# def z2(x, y):
-#     xrn = x / R_N
-#     yrn = y / R_N
-#     amp = 0.0
-#     xrn0 = 1.0
-#     yrn0 = 1.0
-#     for ii in range(0, 8):
-#         yrn0 = 1.0
-#         for jj in range(0, 8):
-#             amp += a2[ii, jj] * (xrn0) * (yrn0)
-#             yrn0 = yrn0 * yrn
-#         xrn0 = xrn0 * xrn
-#     return amp
-
 @nb.jit(nopython=True, parallel=False, fastmath=True)
 def z2(x, y):
-    num = len(x)
     xrn = x / R_N
     yrn = y / R_N
     amp = np.zeros_like(x)
@@ -379,33 +334,63 @@ def z2(x, y):
         xrn0 = xrn0 * xrn
     return amp
 
+# def d_z1(x, y):
+#     amp_x = 0
+#     amp_y = 0
+#     for ii in range(7):
+#         for jj in range(7):
+#             amp_x += (
+#                 a1[ii, jj] * (ii / R_N) * ((x / R_N) ** (ii - 1)) * ((y / R_N) ** jj)
+#             )
+#             amp_y += (
+#                 a1[ii, jj] * ((x / R_N) ** ii) * (jj / R_N) * ((y / R_N) ** (jj - 1))
+#             )
+#     return amp_x, amp_y
+
 def d_z1(x, y):
-    amp_x = 0
-    amp_y = 0
+    amp_x = np.zeros_like(x)
+    amp_y = np.copy(amp_x)
+    xrn = x / R_N
+    yrn = y / R_N
+    xrn0 = np.ones_like(x)
+    yrn0 = np.copy(xrn0)
     for ii in range(7):
+        yrn0 = yrn0 * 0.0 + 1.0
         for jj in range(7):
-            amp_x += (
-                a1[ii, jj] * (ii / R_N) * ((x / R_N) ** (ii - 1)) * ((y / R_N) ** jj)
-            )
-            amp_y += (
-                a1[ii, jj] * ((x / R_N) ** ii) * (jj / R_N) * ((y / R_N) ** (jj - 1))
-            )
+            amp_x = amp_x + a1[ii, jj] * (ii / R_N) * (xrn0/xrn) * (yrn0)
+            amp_y = amp_y + a1[ii, jj] * (xrn0) * (jj / R_N) * (yrn0/yrn) 
+            yrn0 = yrn0 * yrn
+        xrn0 = xrn0 * xrn
     return amp_x, amp_y
 
+# def d_z2(x, y):
+#     amp_x = 0
+#     amp_y = 0
+#     for ii in range(8):
+#         for jj in range(8):
+#             amp_x += (
+#                 a2[ii, jj] * (ii / R_N) * ((x / R_N) ** (ii - 1)) * ((y / R_N) ** jj)
+#             )
+#             amp_y += (
+#                 a2[ii, jj] * ((x / R_N) ** ii) * (jj / R_N) * ((y / R_N) ** (jj - 1))
+#             )
+#     return amp_x, amp_y
 
 def d_z2(x, y):
-    amp_x = 0
-    amp_y = 0
+    amp_x = np.zeros_like(x)
+    amp_y = np.copy(amp_x)
+    xrn = x / R_N
+    yrn = y / R_N
+    xrn0 = np.ones_like(x)
+    yrn0 = np.copy(xrn0)
     for ii in range(8):
+        yrn0 = yrn0 * 0.0 + 1.0
         for jj in range(8):
-            amp_x += (
-                a2[ii, jj] * (ii / R_N) * ((x / R_N) ** (ii - 1)) * ((y / R_N) ** jj)
-            )
-            amp_y += (
-                a2[ii, jj] * ((x / R_N) ** ii) * (jj / R_N) * ((y / R_N) ** (jj - 1))
-            )
+            amp_x = amp_x + a2[ii, jj] * (ii / R_N) * (xrn0/xrn) * (yrn0)
+            amp_y = amp_y + a2[ii, jj] * (xrn0) * (jj / R_N) * (yrn0/yrn) 
+            yrn0 = yrn0 * yrn
+        xrn0 = xrn0 * xrn
     return amp_x, amp_y
-
 
 # Coordinate transfer functions. Transferring
 # coordinates between telescope reference frame

@@ -20,8 +20,8 @@ if module_path not in sys.path:
 import sim.tele_geo_ar as tg
 from numerical.root_finder import bisection, brentq, brentq_arg, bisection_arg
 
-import sim.pan_mod as pm
-from sim.pan_mod import *
+import sim.pan_mod_ar as pm
+from sim.pan_mod_ar import *
 y_cent_m1 = -7201.003729431267
 
 adj_pos_m1, adj_pos_m2 = pm.get_single_vert_adj_positions()
@@ -56,17 +56,34 @@ def root_z1(t, x_m2, y_m2, z_m2, alpha, beta, gamma):
     return zm1 - z_m1
 
 def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
+    '''
+    Trace rays from the receiver to mirror 1 and mirror 2 of LAT
+    This function serves as an estimator to find out on what panels
+    the rays will fall.
+    Arguemnts:
+        P_rx         = Receiver feed position [mm] (in telescope reference frame)
+                       np array of shape (3, )
+        tg_th_1      = angle of the mirror 1
+        tg_th2       = angle of the mirror 2
+        theta        = np.array of the theta of rays
+        phi          = np.array of the phi of rays
+        estima       = [np.array, np.array], a list containing the estimations of
+                       the 2 paths (from RX to M2 and from M2 to M1)
+    Return:
+        out          = np array of shape (6, number of rays)
+                       details see below
+    '''
 
     theta_N = len(theta)
     phi_N = len(phi)
     theta = theta.repeat(theta_N).reshape((theta_N, theta_N)).T.flatten()
     phi = phi.repeat(phi_N)
+
     # Read in telescope geometry values
     th2 = tg_th2
     focal = tg_F_2
-
+    
     n_pts = theta_N*theta_N
-
     # initialize arrays
     N_hat_t = np.zeros((3, n_pts))
     tan_rx_m2_t = np.zeros((3, n_pts))
@@ -155,7 +172,6 @@ def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
 
     ########## Tele. r.f ###########################################################
     # Use a root finder to find where the ray intersects with M1
-
     if len(estima) !=0 :
         estimator = estima[1]
         lb = estimator - 1e3
@@ -175,8 +191,8 @@ def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
     P_m1[2] = P_m2[2] + tan_og_t[2] * t_m1
 
     # Write out
-    out[0:3] = P_m2
-    out[3:6] = P_m1
+    out[0:3] = P_m2 # coordinates of intersection points on mirror 2
+    out[3:6] = P_m1 # coordinates of intersection points on mirror 1
     return out
 
 def root_z2_pm(t, x_0, y_0, z_0, alpha, beta, gamma, a, b, c, d, e, x0, y0):
@@ -246,13 +262,24 @@ def aperature_fields_from_panel_model(
     tg_th2, tg_z_ap, tg_th_fwhp, theta, phi, rxmirror
     ):
     '''
+    Trace rays from the receiver to the aperature of LAT
+    with errors in panels of both mirror 1 and mirror 2
     Arguemnts:
         panel_model1 = surface error parameters of panels of miirror 1
         panel_model2 = surface error parameters of panels of miirror 2
-        P_rx = Receiver feed position [mm] (in telescope reference frame)
-               np array of shape (3, )
+        P_rx         = Receiver feed position [mm] (in telescope reference frame)
+                       np array of shape (3, )
+        tg_th_1      = angle of the mirror 1
+        tg_th2       = angle of the mirror 2
+        tg_z_ap      = z coordinate of the aperture
+        tg_th_fwhp   = FWHP of the receiver horn
+        theta        = np.array of the theta of rays
+        phi          = np.array of the phi of rays
+        rxmirror     = estimated positions of intersection points,  
+                       result of 'ray_mirror_pts' function
     Return:
-
+        out          = np array of shape (17, num of valid rays)
+                       details see below
     '''
     theta_N = len(theta)
     phi_N = len(phi)
@@ -321,7 +348,6 @@ def aperature_fields_from_panel_model(
     tan_og_t = np.zeros((3, n_pts))
     tan_m2_m1_t = np.zeros((3, n_pts))
     tan_og_t = np.zeros((3, n_pts))
-    ones = np.ones(n_pts)
     out = np.zeros((17, n_pts))
 
     # trace the rays from the receiver to mirror 2
@@ -495,18 +521,18 @@ def aperature_fields_from_panel_model(
     #     tan_rx_m2_t[0] / np.sqrt(tan_rx_m2_t[1] ** 2 + tan_rx_m2_t[2] ** 2)
     # )
 
-    out[0:3] = P_m2
-    out[3:6] = P_m1
-    out[6:9] = N_hat_t
-    out[9:12] = pos_ap
-    out[12:15] = tan_og_t
+    out[0:3] = P_m2 # coordinates of intersection points on mirror 2
+    out[3:6] = P_m1 # coordinates of intersection points on mirror 1
+    out[6:9] = N_hat_t # directions of rays pointing towards mirror 1
+    out[9:12] = pos_ap # coordinates of intersection points on aperture
+    out[12:15] = tan_og_t # directions of rays pointing away from mirror 1
 
-    out[15] = total_path_length
+    out[15] = total_path_length # total path length of rays
     out[16] = np.exp(
-        (-0.5)
-        * ((theta - th_mean) ** 2 + (phi - ph_mean) ** 2)
-        / (horn_fwhp / (np.sqrt(8 * np.log(2)))) ** 2
-    )
+                    (-0.5)
+                    * ((theta - th_mean) ** 2 + (phi - ph_mean) ** 2)
+                    / (horn_fwhp / (np.sqrt(8 * np.log(2)))) ** 2
+                    ) # intensity modification from receiver feedhorn 
     return out
 
     
@@ -520,6 +546,7 @@ if __name__ == "__main__":
         
     # from time import time
     import ap_field as ap
+    import pan_mod as pm_orig
     tele_geo = tg.initialize_telescope_geometry()
     P_rx = np.array([-50, 209, 50])
     tg_th2 = tele_geo.th2
@@ -536,14 +563,20 @@ if __name__ == "__main__":
     t2 = time()
     print(f'Function ray_mirror_pts executed in {(t2-t1):.8f}s')
 
+    t1 = time()
+    P_rx_est = np.array([0, 0, 0])
+    rmpts_test_est = ray_mirror_pts(P_rx_est, tg_th2, tg_F_2, theta, phi)
+    t2 = time()
+    print(f'Function ray_mirror_pts (cached) executed in {(t2-t1):.8f}s')
+
+    t1 = time()
     estima = np.zeros((2, phi_N*theta_N))
     estima[0] = np.sqrt(np.sum(rmpts_test[0:3]**2, axis=0))
     estima[1] = np.sqrt(np.sum((rmpts_test[3:6] - rmpts_test[0:3])**2, axis=0))
     P_rx_est = np.array([0, 0, 0])
-    t1 = time()
     rmpts_test_est = ray_mirror_pts(P_rx_est, tg_th2, tg_F_2, theta, phi, estima=estima)
     t2 = time()
-    print(f'Function ray_mirror_pts (with estimator) executed in {(t2-t1):.8f}s')
+    print(f'Function ray_mirror_pts (cached)(with estimator) executed in {(t2-t1):.8f}s')
 
     t1 = time()
     rmpts = ap.ray_mirror_pts(P_rx, tele_geo, theta, phi)
@@ -551,7 +584,7 @@ if __name__ == "__main__":
     print(f'Function ap.ray_mirror_pts executed in {(t2-t1):.8f}s')
     # print(rmpts-rmpts_test)
 
-    if np.allclose(rmpts, rmpts_test, rtol=1e-11, atol=1e-11):
+    if np.allclose(rmpts, rmpts_test, rtol=1e-12, atol=1e-12):
         print("OH Yes! ray_mirror_pts DONE")
     else:
         print("FML check the ray_mirror_pts function again")
@@ -563,6 +596,12 @@ if __name__ == "__main__":
         2, adj_2_A, 1, save
     )  # Panel Model on M2
     panel_model1 = pm.panel_model_from_adjuster_offsets(
+        1, adj_1_A, 1, save
+    )  # Panel Model on M1
+    panel_model2_orig = pm_orig.panel_model_from_adjuster_offsets(
+        2, adj_2_A, 1, save
+    )  # Panel Model on M2
+    panel_model1_orig = pm_orig.panel_model_from_adjuster_offsets(
         1, adj_1_A, 1, save
     )  # Panel Model on M1
     rxmirror = rmpts
@@ -579,7 +618,7 @@ if __name__ == "__main__":
     print(f'Function aperature_fields_from_panel_model executed in {(t2-t1):.8f}s')
 
     t1 = time()    
-    apfield_raw = ap.aperature_fields_from_panel_model(panel_model1, panel_model2, \
+    apfield_raw = ap.aperature_fields_from_panel_model(panel_model1_orig, panel_model2_orig, \
                                         P_rx, tele_geo, theta, phi, rxmirror
                                         )
     fp = np.where(apfield_raw[15,:]!=0)
@@ -590,7 +629,7 @@ if __name__ == "__main__":
     print(f'Function ap.aperature_fields_from_panel_model executed in {(t2-t1):.8f}s')
     # print(apfield_test-apfield)
 
-    if np.allclose(apfield, apfield_test, rtol=1e-11, atol=1e-11):
+    if np.allclose(apfield, apfield_test, rtol=1e-12, atol=1e-12):
         print("OH Yes! aperature_fields_from_panel_model DONE")
     else:
         print("FML check the aperature_fields_from_panel_model function again")
