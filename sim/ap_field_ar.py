@@ -9,6 +9,7 @@ Chun Tung Cheung
 (January 2022)
 """
 import numpy as np
+from time import time
 
 import sys
 from pathlib import Path
@@ -16,8 +17,8 @@ module_path = str(Path(__file__).parents[1])
 if module_path not in sys.path:
     sys.path.append(module_path)
 # # from DEFAULTS import PARENT_PATH
-from sim.tele_geo import *
-from numerical.root_finder import brentq, brentq_arg, bisection_arg
+import sim.tele_geo_ar as tg
+from numerical.root_finder import bisection, brentq, brentq_arg, bisection_arg
 
 import sim.pan_mod as pm
 from sim.pan_mod import *
@@ -34,9 +35,9 @@ def root_z2(t, x_0, y_0, z_0, alpha, beta, gamma):
     z = z_0 + gamma * t
 
     # Convert to M2 r.f.
-    xm2, ym2, zm2 = tele_into_m2(x, y, z)
+    xm2, ym2, zm2 = tg.tele_into_m2(x, y, z)
     # Z of mirror in M2 r.f.
-    z_m2 = z2(xm2, ym2)
+    z_m2 = tg.z2(xm2, ym2)
     return zm2 - z_m2
 
 def root_z1(t, x_m2, y_m2, z_m2, alpha, beta, gamma):
@@ -47,14 +48,15 @@ def root_z1(t, x_m2, y_m2, z_m2, alpha, beta, gamma):
     z = z_m2 + gamma * t
 
     # Convert to M1 r.f.
-    xm1, ym1, zm1 = tele_into_m1(x, y, z)
+    xm1, ym1, zm1 = tg.tele_into_m1(x, y, z)
 
     # Z of mirror in M1 r.f.
-    z_m1 = z1(xm1, ym1)
+    z_m1 = tg.z1(xm1, ym1)
     # print(zm1 - z_m1)
     return zm1 - z_m1
 
 def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
+
     theta_N = len(theta)
     phi_N = len(phi)
     theta = theta.repeat(theta_N).reshape((theta_N, theta_N)).T.flatten()
@@ -86,8 +88,10 @@ def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
         lb = ones * (focal + 1e3)
         ub = ones * (focal + 13e3)
 
-    t_m2 = bisection_arg(root_z2, lb, ub, 
-                    (P_rx[0], P_rx[1], P_rx[2], D_rxm2[0], D_rxm2[1], D_rxm2[2]))
+    def root_z2_fr(t):
+        return root_z2(t, P_rx[0], P_rx[1], P_rx[2], D_rxm2[0], D_rxm2[1], D_rxm2[2])
+
+    t_m2 = bisection(root_z2_fr, lb, ub)
 
     # Endpoint of ray:
     P_m2[0] = P_rx[0] + D_rxm2[0] * t_m2
@@ -96,11 +100,11 @@ def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
 
     ########## M2 r.f ###########################################################
 
-    x_m2_temp, y_m2_temp, z_m2_temp = tele_into_m2(np.copy(P_m2[0]), np.copy(P_m2[1]), np.copy(P_m2[2]))
-    x_rx_temp, y_rx_temp, z_rx_temp = tele_into_m2(P_rx[0], P_rx[1], P_rx[2])
+    x_m2_temp, y_m2_temp, z_m2_temp = tg.tele_into_m2(P_m2[0],P_m2[1], P_m2[2])
+    x_rx_temp, y_rx_temp, z_rx_temp = tg.tele_into_m2(P_rx[0], P_rx[1], P_rx[2])
 
     # Normal vector of ray on M2
-    norm_x, norm_y = d_z2(x_m2_temp, y_m2_temp)
+    norm_x, norm_y = tg.d_z2(x_m2_temp, y_m2_temp)
     norm_z = np.ones(n_pts)
     normalizer = 1.0 / np.sqrt(norm_x**2 + norm_y**2 + 1.0)
     N_hat = normalizer*np.array([-norm_x, -norm_y, norm_z])
@@ -159,15 +163,11 @@ def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
     else:
         lb = ones*50.0
         ub = ones*22000.0
+    def root_z1_fr(t):
+        return root_z1(t, P_m2[0], P_m2[1], P_m2[2], tan_og_t[0], tan_og_t[1], tan_og_t[2])
 
-    t_m1 = bisection_arg(root_z1, 
-                         lb, ub,
-                         (
-                             P_m2[0], P_m2[1], P_m2[2], 
-                             tan_og_t[0], tan_og_t[1], tan_og_t[2]
-                         )
-                        )
-    
+    t_m1 = bisection(root_z1_fr, lb, ub)
+
     # Endpoint of ray:
     # P_m1 = P_m2 + tan_og_t * t_m1
     P_m1[0] = P_m2[0] + tan_og_t[0] * t_m1
@@ -184,12 +184,12 @@ def root_z2_pm(t, x_0, y_0, z_0, alpha, beta, gamma, a, b, c, d, e, x0, y0):
     y = y_0 + beta * t
     z = z_0 + gamma * t
      # Convert ray's endpoint into M2 coordinates
-    xm2, ym2, zm2 = tele_into_m2(x, np.copy(y), z) 
+    xm2, ym2, zm2 = tg.tele_into_m2(x, y, z) 
 
     if z_0 != 0:
         z /= np.cos(np.arctan(1 / 3))
     # Convert ray's endpoint into M2 coordinates
-    xm2_err, ym2_err, _ = tele_into_m2(x, y, z)  
+    xm2_err, ym2_err, _ = tg.tele_into_m2(x, y, z)  
 
     # x_temp = xm1_err * np.cos(np.pi) + zm1_err * np.sin(np.pi)
     x_temp = xm2_err * -1.0 
@@ -205,7 +205,7 @@ def root_z2_pm(t, x_0, y_0, z_0, alpha, beta, gamma, a, b, c, d, e, x0, y0):
         + e * (xpc * ypc)
         )   
 
-    z_m2 = z2(xm2, ym2)  # Z of mirror in M2 coordinates
+    z_m2 = tg.z2(xm2, ym2)  # Z of mirror in M2 coordinates
 
     root = zm2 - (z_m2 + z_err)
     return root
@@ -215,9 +215,9 @@ def root_z1_pm(t, x_m2, y_m2, z_m2, alpha, beta, gamma, a, b, c, d, e, x0, y0):
     y = y_m2 + beta * t
     z = z_m2 + gamma * t
     # take ray end coordinates and convert to M1 coordinates
-    xm1, ym1, zm1 = tele_into_m1(x, np.copy(y), np.copy(z))  
+    xm1, ym1, zm1 = tg.tele_into_m1(x, y, z)  
 
-    xm1_err, ym1_err, _ = tele_into_m1(x, y, z)
+    xm1_err, ym1_err, _ = tg.tele_into_m1(x, y, z)
 
     # x_temp = xm1_err * np.cos(np.pi) + zm1_err * np.sin(np.pi)
     # y_temp = ym1_err
@@ -237,7 +237,7 @@ def root_z1_pm(t, x_m2, y_m2, z_m2, alpha, beta, gamma, a, b, c, d, e, x0, y0):
         + e * (xpc * ypc)
     )
 
-    z_m1 = z1(xm1, ym1)  # Z of mirror 1 in M1 coordinates
+    z_m1 = tg.z1(xm1, ym1)  # Z of mirror 1 in M1 coordinates
     root = zm1 - (z_m1 + z_err)
     return root
 
@@ -254,7 +254,6 @@ def aperature_fields_from_panel_model(
     Return:
 
     '''
-
     theta_N = len(theta)
     phi_N = len(phi)
     th_mean = np.mean(theta)
@@ -343,16 +342,12 @@ def aperature_fields_from_panel_model(
     ub = estimator+1e3
     # lb = ones * (focal + 1e3)
     # ub = ones * (focal + 12e3)
-    t_m2 = bisection_arg(
-                            root_z2_pm, 
-                            lb, ub, 
-                            (
-                                P_rx[0], P_rx[1], P_rx[2], 
+    def root_z2_pm_fr(t):
+        return root_z2_pm(t, P_rx[0], P_rx[1], P_rx[2], 
                                 D_rxm2[0], D_rxm2[1], D_rxm2[2], 
-                                a, b, c, d, e, x0, y0
-                            ), 
-                            tol=1e-12, iter_nmax=100
-                        )
+                                a, b, c, d, e, x0, y0)
+    t_m2 = bisection(root_z2_pm_fr, lb, ub, tol=1e-12, iter_nmax=100)
+
     # Location of where ray hits M2
     P_m2[0] = P_rx[0] + D_rxm2[0] * t_m2
     P_m2[1] = P_rx[1] + D_rxm2[1] * t_m2
@@ -362,10 +357,10 @@ def aperature_fields_from_panel_model(
     
 
     ###### in M2 coordinates ##########################
-    x_m2_temp, y_m2_temp, z_m2_temp = tele_into_m2(P_m2[0], np.copy(P_m2[1]), P_m2[2])  # P_m2 temp
-    x_rx_temp, y_rx_temp, z_rx_temp = tele_into_m2(P_rx[0], P_rx[1], P_rx[2])  # P_rx temp
+    x_m2_temp, y_m2_temp, z_m2_temp = tg.tele_into_m2(P_m2[0], P_m2[1], P_m2[2])  # P_m2 temp
+    x_rx_temp, y_rx_temp, z_rx_temp = tg.tele_into_m2(P_rx[0], P_rx[1], P_rx[2])  # P_rx temp
 
-    norm_x, norm_y = d_z2(x_m2_temp, y_m2_temp)
+    norm_x, norm_y = tg.d_z2(x_m2_temp, y_m2_temp)
     norm_z = np.ones(n_pts)
     normalizer = 1.0 / np.sqrt(norm_x**2 + norm_y**2 + 1.0)
     N_hat = normalizer*np.array([-norm_x, -norm_y, norm_z])
@@ -425,15 +420,12 @@ def aperature_fields_from_panel_model(
     ub = estimator+1e3
     # lb = ones*50.0
     # ub = ones*22000.0
-    t_m1 = bisection_arg(
-                         root_z1_pm, 
-                         lb, ub, 
-                         (
+    def root_z1_pm_fr(t):
+        return root_z1_pm(t, 
                           P_m2[0], P_m2[1], P_m2[2], \
                           tan_og_t[0], tan_og_t[1], tan_og_t[2],\
-                          a, b, c, d, e, x0, y0
-                         )
-                        )
+                          a, b, c, d, e, x0, y0)
+    t_m1 = bisection(root_z1_pm_fr, lb, ub)
 
     # Location of where ray hits M1
     P_m1[0] = P_m2[0] + tan_og_t[0] * t_m1
@@ -441,10 +433,10 @@ def aperature_fields_from_panel_model(
     P_m1[2] = P_m2[2] + tan_og_t[2] * t_m1
 
     ###### in M1 cordinates ##########################
-    x_m1_temp, y_m1_temp, z_m1_temp = tele_into_m1(P_m1[0], np.copy(P_m1[1]), np.copy(P_m1[2]))  # P_m2 temp
-    x_m2_temp, y_m2_temp, z_m2_temp = tele_into_m1(P_m2[0], np.copy(P_m2[1]), np.copy(P_m2[2]))  # P_rx temp
+    x_m1_temp, y_m1_temp, z_m1_temp = tg.tele_into_m1(P_m1[0], P_m1[1], P_m1[2])  # P_m2 temp
+    x_m2_temp, y_m2_temp, z_m2_temp = tg.tele_into_m1(P_m2[0], P_m2[1], P_m2[2])  # P_rx temp
 
-    norm_x, norm_y = d_z1(x_m1_temp, y_m1_temp)
+    norm_x, norm_y = tg.d_z1(x_m1_temp, y_m1_temp)
     norm_z = np.ones(n_pts)
     normalizer = 1.0 / np.sqrt(norm_x**2 + norm_y**2 + 1.0)
     N_hat = normalizer*np.array([-norm_x, -norm_y, norm_z])
@@ -522,18 +514,18 @@ if __name__ == "__main__":
     '''
     test the code--------------------------------------------------------------
     '''
-    module_path = "D://Users/CCT/Documents/Holography/holosim-ml"
+    module_path = "E://Holography/holosim-ml"
     if module_path not in sys.path:
         sys.path.append(module_path)
         
-    from time import time
+    # from time import time
     import ap_field as ap
-    tele_geo = initialize_telescope_geometry()
+    tele_geo = tg.initialize_telescope_geometry()
     P_rx = np.array([-50, 209, 50])
     tg_th2 = tele_geo.th2
     tg_F_2 = tele_geo.F_2
-    theta_a, theta_b, theta_N = -np.pi / 2 - 0.28, -np.pi / 2 + 0.28, 2
-    phi_a, phi_b, phi_N = np.pi / 2 - 0.28, np.pi / 2 + 0.28, 2
+    theta_a, theta_b, theta_N = -np.pi / 2 - 0.28, -np.pi / 2 + 0.28, 64
+    phi_a, phi_b, phi_N = np.pi / 2 - 0.28, np.pi / 2 + 0.28, 64
     theta = np.linspace(theta_a, theta_b, theta_N)
     phi = np.linspace(phi_a, phi_b, phi_N)
 
