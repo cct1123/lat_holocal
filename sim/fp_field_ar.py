@@ -139,6 +139,11 @@ if __name__ == "__main__":
     theta = np.linspace(theta_a, theta_b, theta_N)
     phi = np.linspace(phi_a, phi_b, phi_N)
 
+    # get parameters from telescope geometry
+    tg_th_1, tg_th2, tg_z_ap = tele_geo.th_1, tele_geo.th2, tele_geo.z_ap
+    tg_th_fwhp, tg_F_2 = tele_geo.th_fwhp, tele_geo.F_2
+    tg_rotc = np.array([tele_geo.x_rotc, tele_geo.y_rotc, tele_geo.z_rotc]) * 1e3 # [mm]
+
     # create panel offsets randomly
     save = 0 
     error_rms = 0
@@ -150,11 +155,6 @@ if __name__ == "__main__":
     panel_model1 = pm.panel_model_from_adjuster_offsets(
         1, adj_1_A, 1, save
     )  # Panel Model on M1
-
-    # get parameters from telescope geometry
-    tg_th_1, tg_th2, tg_z_ap = tele_geo.th_1, tele_geo.th2, tele_geo.z_ap
-    tg_th_fwhp, tg_F_2 = tele_geo.th_fwhp, tele_geo.F_2
-    tg_rotc = np.array([tele_geo.x_rotc, tele_geo.y_rotc, tele_geo.z_rotc]) * 1e3 # [mm]
     
     print("Simulation Starts------------------")
     t1 = time.time()
