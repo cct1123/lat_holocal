@@ -94,7 +94,7 @@ class TelescopeGeometry():
         self.F_2 = 7000.0
         self.th_1 = np.arctan(1.0 / 2.0)  # Primary mirror tilt angle
         self.th_2 = np.arctan(1.0 / 3.0)  # Secondary mirror tilt angle
-        self.th2 = (-np.pi / 2) - th_2
+        self.th2 = (-np.pi / 2) - self.th_2
         self.th_fwhp = 44.0 * np.pi / 180.0  # Full width half power [rad]
         self.N_scan = 100  # Pixels in 1D of grid
         self.de_ang = 1 / 60.0 * np.pi / 180.0  # Far-field angle increment, arcmin = 1/60 degree
