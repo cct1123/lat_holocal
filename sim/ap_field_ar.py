@@ -65,6 +65,7 @@ def ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi, estima=[]):
                        np array of shape (3, )
         tg_th_1      = angle of the mirror 1
         tg_th2       = angle of the mirror 2
+        tg_F_2       = focal length ?? [mm]
         theta        = np.array of the theta of rays
         phi          = np.array of the phi of rays
         estima       = [np.array, np.array], a list containing the estimations of
@@ -564,8 +565,7 @@ if __name__ == "__main__":
     print(f'Function ray_mirror_pts executed in {(t2-t1):.8f}s')
 
     t1 = time()
-    P_rx_est = np.array([0, 0, 0])
-    rmpts_test_est = ray_mirror_pts(P_rx_est, tg_th2, tg_F_2, theta, phi)
+    rmpts_test = ray_mirror_pts(P_rx, tg_th2, tg_F_2, theta, phi)
     t2 = time()
     print(f'Function ray_mirror_pts (cached) executed in {(t2-t1):.8f}s')
 
@@ -573,7 +573,7 @@ if __name__ == "__main__":
     estima = np.zeros((2, phi_N*theta_N))
     estima[0] = np.sqrt(np.sum(rmpts_test[0:3]**2, axis=0))
     estima[1] = np.sqrt(np.sum((rmpts_test[3:6] - rmpts_test[0:3])**2, axis=0))
-    P_rx_est = np.array([0, 0, 0])
+    P_rx_est = np.array([-48, 208, 50.1])
     rmpts_test_est = ray_mirror_pts(P_rx_est, tg_th2, tg_F_2, theta, phi, estima=estima)
     t2 = time()
     print(f'Function ray_mirror_pts (cached)(with estimator) executed in {(t2-t1):.8f}s')

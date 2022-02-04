@@ -9,7 +9,7 @@ import numba as nb
 import plotly.graph_objects as go
 
 class TelescopeGeometry():
-    F_2 = 7000.0
+    F_2 = 7000.0 # focal length [mm]/[m]??
     th_1 = np.arctan(1.0 / 2.0)  # Primary mirror tilt angle
     th_2 = np.arctan(1.0 / 3.0)  # Secondary mirror tilt angle
     th2 = (-np.pi / 2) - th_2
@@ -91,46 +91,46 @@ class TelescopeGeometry():
         self.az0 += az
 
     def reset_geometry(self):
-        F_2 = 7000.0
-        th_1 = np.arctan(1.0 / 2.0)  # Primary mirror tilt angle
-        th_2 = np.arctan(1.0 / 3.0)  # Secondary mirror tilt angle
-        th2 = (-np.pi / 2) - th_2
-        th_fwhp = 44.0 * np.pi / 180.0  # Full width half power [rad]
-        N_scan = 100  # Pixels in 1D of grid
-        de_ang = 1 / 60.0 * np.pi / 180.0  # Far-field angle increment, arcmin = 1/60 degree
+        self.F_2 = 7000.0
+        self.th_1 = np.arctan(1.0 / 2.0)  # Primary mirror tilt angle
+        self.th_2 = np.arctan(1.0 / 3.0)  # Secondary mirror tilt angle
+        self.th2 = (-np.pi / 2) - th_2
+        self.th_fwhp = 44.0 * np.pi / 180.0  # Full width half power [rad]
+        self.N_scan = 100  # Pixels in 1D of grid
+        self.de_ang = 1 / 60.0 * np.pi / 180.0  # Far-field angle increment, arcmin = 1/60 degree
 
         # Receiver feed position [m]
-        rx_x = 0.0
-        rx_y = 0.0
-        rx_z = 0.0
+        self.rx_x = 0.0
+        self.rx_y = 0.0
+        self.rx_z = 0.0
 
         # Phase reference [m]
-        x_phref = 0.0
-        y_phref = -7.2
-        z_phref = 0.0
+        self.x_phref = 0.0
+        self.y_phref = -7.2
+        self.z_phref = 0.0
         
         # Center of rotation [m]
-        x_rotc = 0.0
-        y_rotc = -7.2
-        z_rotc = 0.0
+        self.x_rotc = 0.0
+        self.y_rotc = -7.2
+        self.z_rotc = 0.0
 
         # Aperture plane [m]
-        x_ap = 3.0
-        y_ap = -7.2
-        z_ap = 4.0
+        self.x_ap = 3.0
+        self.y_ap = -7.2
+        self.z_ap = 4.0
 
         # Source wavelength [m]
-        lambda_ = (30.0 / 100.0) * 0.01  
+        self.lambda_ = (30.0 / 100.0) * 0.01  
         # Wavenumber [1/m]
-        k = 2 * np.pi / lambda_  
+        self.k = 2 * np.pi / self.lambda_  
         # Source position (tower) [m]
-        x_tow = 0.0
-        y_tow = -7.2
-        z_tow = 1e3
+        self.x_tow = 0.0
+        self.y_tow = -7.2
+        self.z_tow = 1e3
 
         # Azimuth and Elevation center [rad]
-        az0 = 0.0
-        el0 = np.arctan(-(y_tow-y_rotc) / z_tow)
+        self.az0 = 0.0
+        self.el0 = np.arctan(-(self.y_tow-self.y_rotc) / self.z_tow)
 
     def init_drawing(self):
         plot_layout = go.Layout(title='SO Large Aperture Telescope', autosize=False,
@@ -149,7 +149,6 @@ class TelescopeGeometry():
             self.init_drawing()
         miiror_size = 6000.0/np.cos(np.arctan(1 / 2))
         msf = miiror_size/2.0
-
         # positions of mirror 1 surface
         x_m1 = np.linspace(-msf,msf,10, endpoint=True) # [mm]
         y_m1 = np.linspace(-msf,msf,10, endpoint=True) # [mm]
@@ -211,8 +210,8 @@ class TelescopeGeometry():
                                     hoverinfo="name"
                                 )
 
-        plot_setup = [plot_m1, plot_m2, plot_fp]
-        self.figure.add_traces(plot_setup)
+        self.plot_setup = [plot_m1, plot_m2, plot_fp]
+        self.figure.add_traces(self.plot_setup)
 
         if show_figure:
             self.show_figure()
@@ -279,12 +278,20 @@ class TelescopeGeometry():
                                 name="rays"
                             )
                 ]
-        self.figure.add_traces(plot_rays + plot_ap)
+        self.plot_rays = plot_rays + plot_ap
+        self.figure.add_traces(self.plot_rays)
         if show_figure:
             self.show_figure()
             
     def show_figure(self):
         self.figure.show()
+        # self.init_drawing()
+    
+    def clear_figure(self):
+        if not hasattr(self, "figure"):
+            self.init_drawing()
+        else:
+            self.figure.data = []
 # compatible class for older version of codes
 class initialize_telescope_geometry(TelescopeGeometry):
     def __init__(self):
@@ -334,19 +341,6 @@ def z2(x, y):
         xrn0 = xrn0 * xrn
     return amp
 
-# def d_z1(x, y):
-#     amp_x = 0
-#     amp_y = 0
-#     for ii in range(7):
-#         for jj in range(7):
-#             amp_x += (
-#                 a1[ii, jj] * (ii / R_N) * ((x / R_N) ** (ii - 1)) * ((y / R_N) ** jj)
-#             )
-#             amp_y += (
-#                 a1[ii, jj] * ((x / R_N) ** ii) * (jj / R_N) * ((y / R_N) ** (jj - 1))
-#             )
-#     return amp_x, amp_y
-
 def d_z1(x, y):
     amp_x = np.zeros_like(x)
     amp_y = np.copy(amp_x)
@@ -362,19 +356,6 @@ def d_z1(x, y):
             yrn0 = yrn0 * yrn
         xrn0 = xrn0 * xrn
     return amp_x, amp_y
-
-# def d_z2(x, y):
-#     amp_x = 0
-#     amp_y = 0
-#     for ii in range(8):
-#         for jj in range(8):
-#             amp_x += (
-#                 a2[ii, jj] * (ii / R_N) * ((x / R_N) ** (ii - 1)) * ((y / R_N) ** jj)
-#             )
-#             amp_y += (
-#                 a2[ii, jj] * ((x / R_N) ** ii) * (jj / R_N) * ((y / R_N) ** (jj - 1))
-#             )
-#     return amp_x, amp_y
 
 def d_z2(x, y):
     amp_x = np.zeros_like(x)
