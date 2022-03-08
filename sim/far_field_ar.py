@@ -74,25 +74,26 @@ def far_field_sim_unjit(ap_field, msmt_geo, rx):
     # Elevation rotation (about x axis)
     sinelcur = np.sin(el_cur)
     coselcur = np.cos(el_cur)
+    sinazcur = np.sin(az_cur)
+    cosazcur = np.cos(az_cur)
     x_temp = np.outer(oneselcur, x_ap)
     y_temp = np.outer(coselcur, y_ap) - np.outer(sinelcur, z_ap)
     z_temp = np.outer(sinelcur, y_ap) + np.outer(coselcur, z_ap)
 
-    cosazmatrx = np.outer(np.cos(az_cur), np.ones(N_apscan)) 
-    sinazmatrx = np.outer(np.sin(az_cur), np.ones(N_apscan)) 
+    cosazmatrx = np.outer(cosazcur, np.ones(N_apscan)) 
+    sinazmatrx = np.outer(sinazcur, np.ones(N_apscan)) 
     x_apr = cosazmatrx * x_temp + sinazmatrx * z_temp
     y_apr = y_temp
     z_apr = -sinazmatrx * x_temp + cosazmatrx * z_temp
 
     # Evaluate the distance to the phase reference if prompted to do so
-
     x_temp = x_phref
-    y_temp = np.cos(el_cur) * y_phref - np.sin(el_cur) * z_phref
-    z_temp = np.sin(el_cur) * y_phref + np.cos(el_cur) * z_phref
+    y_temp = coselcur * y_phref - sinelcur * z_phref
+    z_temp = sinelcur * y_phref + coselcur * z_phref
 
-    x_phrefr = np.cos(az_cur) * x_temp + np.sin(az_cur) * z_temp
+    x_phrefr = cosazcur * x_temp + sinazcur * z_temp
     y_phrefr = y_temp
-    z_phrefr = -np.sin(az_cur) * x_temp + np.cos(az_cur) * z_temp
+    z_phrefr = -sinazcur * x_temp + cosazcur * z_temp
 
     r_phref = np.sqrt(
         (x_phrefr - x_tow) * (x_phrefr - x_tow)
@@ -112,7 +113,6 @@ def far_field_sim_unjit(ap_field, msmt_geo, rx):
     #                 (Fcomplex * np.exp(ima * k * r) / (4 * np.pi * r))
     #                 * ((ima * k + 1 / r) * z_dot_rhat + ima * k * np.outer(oneselcur, k_z)), axis=1)
     #         )
-
     
     field_far_integrand = Fcomplex * np.exp(ima * k * r) * z_dot_rhat  / (r * pathl)
     field_far = np.mean(field_far_integrand, axis=1) * k / (2*np.pi*1j)
@@ -130,7 +130,7 @@ def far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref
     z_ap = ap_field[11, :] / 1e3 - z_rotc
 
     
-    radius = 30000.0 # [m]
+    radius = 3.0 # [m]
     validindex = np.where(x_ap*x_ap+y_ap*y_ap<=radius*radius)
     x_ap = x_ap[validindex]
     y_ap = y_ap[validindex]
@@ -147,68 +147,63 @@ def far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref
 
     k = 2.0 * np.pi / lambda_  # Wavenumber [1/m]
 
-    # az, el angles for rotation
-    el_cur = np.zeros(4*N_scan*N_scan, dtype=np.float64)
-    az_cur = np.zeros(4*N_scan*N_scan, dtype=np.float64)
-    for i_ang in nb.prange(-N_scan, N_scan, 1):
-        for j_ang in nb.prange(-N_scan, N_scan, 1):
-            i_out = (i_ang + N_scan) * 2 * N_scan + (j_ang + N_scan)
-            az_cur[i_out] = az0 + (i_ang) * de_ang
-            el_cur[i_out] = el0 + (j_ang) * de_ang
-
     # Complex fields
     Fcomplex = ampl * np.exp(1j * pathl * k)
 
     # Npts = len(x_ap)
     out = np.zeros((3, N_scan * N_scan * 4), dtype=np.complex128)
-    oneselcur = np.ones(len(el_cur))
 
-    # Elevation rotation (about x axis)
-    sinelcur = np.sin(el_cur)
-    coselcur = np.cos(el_cur)
-    sinazcur = np.sin(az_cur)
-    cosazcur = np.cos(az_cur)
+    # az, el angles for rotation
 
-    x_temp = np.outer(oneselcur, x_ap)
-    y_temp = np.outer(coselcur, y_ap) - np.outer(sinelcur, z_ap)
-    z_temp = np.outer(sinelcur, y_ap) + np.outer(coselcur, z_ap)
+    for i_ang in nb.prange(-N_scan, N_scan, 1):
+        az_cur = az0 + (i_ang) * de_ang
+        sinazcur = np.sin(az_cur)
+        cosazcur = np.cos(az_cur)
+        for j_ang in nb.prange(-N_scan, N_scan, 1):
+            i_out = (i_ang + N_scan) * 2 * N_scan + (j_ang + N_scan)
+            el_cur = el0 + (j_ang) * de_ang
 
-    cosazmatrx = np.outer(cosazcur, np.ones(N_apscan)) 
-    sinazmatrx = np.outer(sinazcur, np.ones(N_apscan)) 
-    x_apr = cosazmatrx * x_temp + sinazmatrx * z_temp
-    y_apr = y_temp
-    z_apr = -sinazmatrx * x_temp + cosazmatrx * z_temp
+            sinelcur = np.sin(el_cur)
+            coselcur = np.cos(el_cur)
 
-    # # Evaluate the distance to the phase reference if prompted to do so
-    # x_temp = x_phref
-    # y_temp = coselcur * y_phref - sinelcur * z_phref
-    # z_temp = sinelcur * y_phref + coselcur * z_phref
+            # Elevation rotation (about x axis)
+            x_temp = x_ap
+            y_temp = coselcur * y_ap - sinelcur * z_ap
+            z_temp = sinelcur * y_ap + coselcur * z_ap
 
-    # x_phrefr = cosazcur * x_temp + sinazcur * z_temp
-    # y_phrefr = y_temp
-    # z_phrefr = -sinazcur * x_temp + cosazcur * z_temp
+            x_apr = cosazcur * x_temp + sinazcur * z_temp
+            y_apr = y_temp
+            z_apr = -sinazcur * x_temp + cosazcur * z_temp
 
-    # r_phref = np.sqrt(
-    #     (x_phrefr - x_tow) * (x_phrefr - x_tow)
-    #     + (y_phrefr - y_tow) * (y_phrefr - y_tow) 
-    #     + (z_phrefr - z_tow) * (z_phrefr - z_tow)
-    # )
+            # Evaluate the distance to the phase reference if prompted to do so
+            x_temp = x_phref
+            y_temp = coselcur * y_phref - sinelcur * z_phref
+            z_temp = sinelcur * y_phref + coselcur * z_phref
 
-    # Evaluate r
-    r = np.sqrt((x_apr - x_tow)*(x_apr - x_tow) + (y_apr - y_tow)*(y_apr - y_tow)+ (z_apr - z_tow)*(z_apr - z_tow))
-    z_dot_rhat = (z_apr - z_tow) * (-1) / r
+            x_phrefr = cosazcur * x_temp + sinazcur * z_temp
+            y_phrefr = y_temp
+            z_phrefr = -sinazcur * x_temp + cosazcur * z_temp
 
-    out[0] = az_cur
-    out[1] = el_cur
-    # integrand =  (Fcomplex * np.exp(1j * k * r) / (4 * np.pi * r))* ((1j * k + 1 / r) * z_dot_rhat + 1j * k * np.outer(oneselcur, k_z))
-    # for ii in nb.prange(4*N_scan*N_scan):
-    #     out[2][ii] = np.mean(integrand[ii]) 
-    # out[2] = np.exp(-1j * r_phref * k) * out[2]
+            r_phref = np.sqrt(
+                (x_phrefr - x_tow) * (x_phrefr - x_tow)
+                + (y_phrefr - y_tow) * (y_phrefr - y_tow) 
+                + (z_phrefr - z_tow) * (z_phrefr - z_tow)
+            )
 
-    field_far_integrand = Fcomplex * np.exp(1j * k * r) * z_dot_rhat  / (r * pathl)
-    for ii in nb.prange(4*N_scan*N_scan):
-        out[2][ii] = np.mean(field_far_integrand[ii]) # reuse the array in the memory
-    out[2] = out[2] * k / (2*np.pi*1j)
+            # Evaluate r
+            r = np.sqrt((x_apr - x_tow)*(x_apr - x_tow) + (y_apr - y_tow)*(y_apr - y_tow)+ (z_apr - z_tow)*(z_apr - z_tow))
+            z_dot_rhat = (z_apr - z_tow) * (-1) / r
+
+            out[0, i_out] = az_cur
+            out[1, i_out] = el_cur
+            
+            integrand =  (Fcomplex * np.exp(1j * k * r) / (4 * np.pi * r))* ((1j * k + 1 / r) * z_dot_rhat + 1j * k * k_z)
+            out[2, i_out] = np.exp(-1j * r_phref * k) * np.mean(integrand) 
+
+            # field_far_integrand = Fcomplex * np.exp(1j * k * r) * z_dot_rhat  / (r * pathl)
+            # for ii in nb.prange(4*N_scan*N_scan):
+            #     out[2][ii] = np.mean(field_far_integrand[ii]) # reuse the array in the memory
+            # out[2] = out[2] * k / (2*np.pi*1j)
 
     return out
 
@@ -320,20 +315,24 @@ if __name__ == "__main__":
     module_path = "E://Holography/holosim-ml"
     if module_path not in sys.path:
         sys.path.append(module_path)
-    import far_field as ff
+    import far_field_mp as ff
 
     # original
     print("Original -------------------")
     farbeam_or = timeit(ff.far_field_sim)(apout, tele_geo, None) 
     print("Under test -----------------------")
     farbeam_ut = timeit(far_field_sim)(apout, tele_geo, None)
+    print("Under test (cached) -----------------------")
+    farbeam_ut = timeit(far_field_sim)(apout, tele_geo, None)
 
-    if np.allclose(farbeam_or, farbeam_ut, rtol=1e-12, atol=1e-12):
+    if np.allclose(farbeam_or[0], farbeam_ut[0], rtol=1e-12, atol=1e-12):
         print("OH Yes! DONE")
     else:
         print("FML Discrepancy found! Check the function again")
-        diff = farbeam_ut-farbeam_or
+        diff = farbeam_ut[0]-farbeam_or[0]
         print(f"Number of deviated entities: {len(np.ravel(np.where(diff>1e-12)))}")
         print(f"Deviated entities' difference: {diff[np.where(diff>1e-12)]}")
-        # print(f"Difference: {diff}")
+        print(f"Difference: {diff}")
+        print(f"farbeam_or[0] : {farbeam_or[0]}")
+        print(f"farbeam_ut[0] : {farbeam_ut[0]}")
         
