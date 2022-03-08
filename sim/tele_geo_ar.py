@@ -168,9 +168,18 @@ class TelescopeGeometry():
         y_fp = np.linspace(-2000,2000,100, endpoint=True) # [mm]
         x_fp, y_fp = np.meshgrid(x_fp, x_fp)
         z_fp = np.zeros_like(x_fp)
-        r = np.sqrt(x_fp**2 + y_fp**2)
-        z_fp = np.where(r<2000,z_fp,np.nan)
+        # r = np.sqrt(x_fp**2 + y_fp**2)
+        # z_fp = np.where(r<2000,z_fp,np.nan)
         x_fp,y_fp,z_fp = y_fp, z_fp, x_fp
+
+        # positions of integration plane 
+        x_intp = np.linspace(-3000,3000,100, endpoint=True) # [mm]
+        y_intp = np.linspace(-3000,3000,100, endpoint=True) # [mm]
+        x_intp, y_intp = np.meshgrid(x_intp, y_intp)
+        z_intp = np.zeros_like(x_fp)
+        # r = np.sqrt(x_fp**2 + y_fp**2)
+        # z_intp = np.where(r<2000,z_fp,np.nan)
+        x_intp,y_intp,z_intp = apert_into_tele(x_intp,y_intp,z_intp)
 
         plot_m1 = go.Surface(
                                     x = x_m1,
@@ -210,7 +219,20 @@ class TelescopeGeometry():
                                     hoverinfo="name"
                                 )
 
-        self.plot_setup = [plot_m1, plot_m2, plot_fp]
+        plot_intp = go.Surface(
+                                    x = x_intp,
+                                    y = y_intp,
+                                    z = z_intp,
+                                    surfacecolor=z_intp*0 + 0.6,
+                                    colorscale='Peach',
+                                    showscale= False, 
+                                    opacity=0.7,
+                                    name = 'Integration Plane',
+                                    showlegend = True, 
+                                    hoverinfo="name"
+                                )
+
+        self.plot_setup = [plot_m1, plot_m2, plot_fp, plot_intp]
         self.figure.add_traces(self.plot_setup)
 
         if show_figure:
@@ -224,11 +246,16 @@ class TelescopeGeometry():
         amp_min = np.min(apfield_t[16,:])
         amp_max = np.max(apfield_t[16,:])
         x_foc, y_foc, z_foc = self.rx_x, self.rx_y, self.rx_z
-
+        aperture_radius = 3000.0
+        x_aprotc = apfield_t[9] - self.x_rotc*1e3  # coordinates of pts on aperature relative to the rotation center [mm]
+        y_aprotc = apfield_t[10] - self.y_rotc*1e3  # coordinates of pts on aperature relative to the rotation center [mm]
+        # z_aprotc = apfield_t[11] - self.x_rotc  # coordinates of pts on aperature relative to the rotation center [mm]
+        inap_bool = ((np.square(x_aprotc) + np.square(y_aprotc)) < np.square(aperture_radius))
+        valid_indices = np.where(inap_bool) #Ignore rays that missed the aperture plane
         plot_rays = []
         x_a_list, y_a_list, z_a_list = [], [], []
         amp_list = []
-        for ii in np.unique(np.random.randint(low=0, high=len(apfield_t[15]), size=num_rayshow)):
+        for ii in np.unique(np.random.choice(np.ravel(valid_indices), num_rayshow)):
             if apfield_t[15][ii] !=0 :
                 x_m1, y_m1, z_m1 = apfield_t[3][ii], apfield_t[4][ii], apfield_t[5][ii]
                 x_m2, y_m2, z_m2 = apfield_t[0][ii], apfield_t[1][ii], apfield_t[2][ii]
@@ -257,7 +284,7 @@ class TelescopeGeometry():
                                             width=5, 
                                             colorscale='Purpor', 
                                             ), 
-                                    opacity=0.4,
+                                    opacity=0.2,
                                     showlegend = False,
                                     hoverinfo='none', 
                                     )
@@ -278,7 +305,8 @@ class TelescopeGeometry():
                                 name="rays"
                             )
                 ]
-        self.plot_rays = plot_rays + plot_ap
+        # self.plot_rays = plot_rays + plot_ap
+        self.plot_rays = plot_rays 
         self.figure.add_traces(self.plot_rays)
         if show_figure:
             self.show_figure()
@@ -341,6 +369,34 @@ def z2(x, y):
         xrn0 = xrn0 * xrn
     return amp
 
+def z1_float(x, y):
+    xrn = x / R_N
+    yrn = y / R_N
+    amp = 0.0
+    xrn0 = 1.0
+    yrn0 = 1.0
+    for ii in range(0, 7):
+        yrn0 = 1.0
+        for jj in range(0, 7):
+            amp += a1[ii, jj] * (xrn0) * (yrn0)
+            yrn0 = yrn0 * yrn
+        xrn0 = xrn0 * xrn
+    return amp
+
+def z2_float(x, y):
+    xrn = x / R_N
+    yrn = y / R_N
+    amp = 0.0
+    xrn0 = 1.0
+    yrn0 = 1.0
+    for ii in range(0, 8):
+        yrn0 = 1.0
+        for jj in range(0, 8):
+            amp += a2[ii, jj] * (xrn0) * (yrn0)
+            yrn0 = yrn0 * yrn
+        xrn0 = xrn0 * xrn
+    return amp
+
 def d_z1(x, y):
     amp_x = np.zeros_like(x)
     amp_y = np.copy(amp_x)
@@ -372,6 +428,8 @@ def d_z2(x, y):
             yrn0 = yrn0 * yrn
         xrn0 = xrn0 * xrn
     return amp_x, amp_y
+
+
 
 # Coordinate transfer functions. Transferring
 # coordinates between telescope reference frame
@@ -415,7 +473,7 @@ def tele_into_m1(x, y, z):
 
 # @nb.jit(nopython=True, parallel=False, fastmath=True)
 def tele_into_m2(x, y, z):
-    yshift = y + 4800.0 + 7200.0
+    yshift = y + 4800.0 + 7200.0 # unit [mm]
     # x_temp = x
     # y_temp = yshift * np.cos(-th2) - z * np.sin(-th2)
     # z_temp = yshift * np.sin(-th2) + z * np.cos(-th2)
@@ -427,6 +485,60 @@ def tele_into_m2(x, y, z):
     y_temp = yshift * costh2 + z * sinth2
     z_temp = -yshift * sinth2 + z * costh2
     return -x, -y_temp, z_temp
+
+def z_ap(x_arr, y_arr):
+    """
+    Aperture plane surface.
+    """
+    z_arr = 0 * x_arr * y_arr
+    return z_arr
+
+
+def z_focal(x_arr, y_arr):
+    """
+    Focal plane surface.
+    """
+    z_arr = 0 * x_arr * y_arr
+    return z_arr
+
+def apert_into_tele(x_arr, y_arr, z_arr):
+    """
+    Coordinate transformation from aperture plane into telescope
+    """
+    return x_arr, y_arr-7200.0, z_arr + 4000.0
+
+def tele_into_apert(x_arr, y_arr, z_arr):
+    """
+    Coordinate transformation from telescope into aperture plane.
+    """
+    # x_arr, y_arr, z_arr = rotate_az_el(x_arr, y_arr, z_arr, el_, az_)  # rotate
+    # z_arr -= 4e3  # go to apert ref frame
+    return x_arr, y_arr, z_arr - 4000.0
+
+def foc_into_tele(x_arr, y_arr, z_arr):
+    """
+    Coordinate transformation from focal plane into telescope.
+    """
+    # x_out = x_arr
+    # y_out = y_arr * np.cos(np.pi / 2) - z_arr * np.sin(np.pi / 2)
+    # z_out = y_arr * np.sin(np.pi / 2) + z_arr * np.cos(np.pi / 2)
+    # x_out, y_out, z_out = rotate_az_el(x_out, y_out, z_out, el_, az_)
+    # return x_out, y_out, z_out
+
+    return x_arr, z_arr, -y_arr
+
+
+def tele_into_foc(x_arr, y_arr, z_arr):
+    """
+    Coordinate transformation from telescope into focal plane.
+    """
+    # x_arr, y_arr, z_arr = rotate_az_el(x_arr, y_arr, z_arr, el_, az_)
+    # x_out = x_arr
+    # y_out = y_arr * np.cos(-np.pi / 2) - z_arr * np.sin(-np.pi / 2)
+    # z_out = y_arr * np.sin(-np.pi / 2) + z_arr * np.cos(-np.pi / 2)
+    # return x_out, y_out, z_out
+
+    return x_arr, z_arr, -y_arr
 
 def tele_geo_init(x, y, z, el, az):
     tele_geo = initialize_telescope_geometry()
