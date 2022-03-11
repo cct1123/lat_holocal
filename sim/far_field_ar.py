@@ -10,6 +10,12 @@ March 2022
 
 import numpy as np
 import numba as nb
+# import sys
+# from pathlib import Path
+# module_path = str(Path(__file__).parents[1])
+# if module_path not in sys.path:
+#     sys.path.append(module_path)
+# from utility.conversion import sky_to_focal
 
 def far_field_sim_unjit(ap_field, msmt_geo, rx):
     # Break out many quantities from msmt_geo
@@ -121,7 +127,12 @@ def far_field_sim_unjit(ap_field, msmt_geo, rx):
     return out
 
 @nb.jit(nopython=True, parallel=False, fastmath=True)
-def far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref,y_phref,z_phref,x_rotc,y_rotc,z_rotc,el0,az0,rx):
+def far_field_sim_jit(ap_field, 
+                      N_scan, de_ang,lambda_,
+                      x_tow,y_tow,z_tow,
+                    #   x_phref,y_phref,z_phref,
+                      x_rotc,y_rotc,z_rotc,
+                      el0,az0,rx):
     # Break out the geometric coordinates from ap_fields
     # Location of points on the aperture plane
     # in rotation centered coordinates
@@ -135,7 +146,7 @@ def far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref
     x_ap = x_ap[validindex]
     y_ap = y_ap[validindex]
     z_ap = z_ap[validindex]
-    N_apscan = len(x_ap)
+    # N_apscan = len(x_ap)
 
     # Propagation vector of the sample points (tan_og)
     # k_x = ap_field[12, :][validindex]
@@ -170,25 +181,23 @@ def far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref
             x_temp = x_ap
             y_temp = coselcur * y_ap - sinelcur * z_ap
             z_temp = sinelcur * y_ap + coselcur * z_ap
-
             x_apr = cosazcur * x_temp + sinazcur * z_temp
             y_apr = y_temp
             z_apr = -sinazcur * x_temp + cosazcur * z_temp
 
-            # Evaluate the distance to the phase reference if prompted to do so
-            x_temp = x_phref
-            y_temp = coselcur * y_phref - sinelcur * z_phref
-            z_temp = sinelcur * y_phref + coselcur * z_phref
+            # # Evaluate the distance to the phase reference if prompted to do so
+            # x_temp = x_phref
+            # y_temp = coselcur * y_phref - sinelcur * z_phref
+            # z_temp = sinelcur * y_phref + coselcur * z_phref
+            # x_phrefr = cosazcur * x_temp + sinazcur * z_temp
+            # y_phrefr = y_temp
+            # z_phrefr = -sinazcur * x_temp + cosazcur * z_temp
 
-            x_phrefr = cosazcur * x_temp + sinazcur * z_temp
-            y_phrefr = y_temp
-            z_phrefr = -sinazcur * x_temp + cosazcur * z_temp
-
-            r_phref = np.sqrt(
-                (x_phrefr - x_tow) * (x_phrefr - x_tow)
-                + (y_phrefr - y_tow) * (y_phrefr - y_tow) 
-                + (z_phrefr - z_tow) * (z_phrefr - z_tow)
-            )
+            # r_phref = np.sqrt(
+            #     (x_phrefr - x_tow) * (x_phrefr - x_tow)
+            #     + (y_phrefr - y_tow) * (y_phrefr - y_tow) 
+            #     + (z_phrefr - z_tow) * (z_phrefr - z_tow)
+            # )
 
             # Evaluate r
             r = np.sqrt((x_apr - x_tow)*(x_apr - x_tow) + (y_apr - y_tow)*(y_apr - y_tow)+ (z_apr - z_tow)*(z_apr - z_tow))
@@ -196,14 +205,15 @@ def far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref
 
             out[0, i_out] = az_cur
             out[1, i_out] = el_cur
-            
-            integrand =  (Fcomplex * np.exp(1j * k * r) / (4 * np.pi * r))* ((1j * k + 1 / r) * z_dot_rhat + 1j * k * k_z)
-            out[2, i_out] = np.exp(-1j * r_phref * k) * np.mean(integrand) 
 
-            # field_far_integrand = Fcomplex * np.exp(1j * k * r) * z_dot_rhat  / (r * pathl)
-            # for ii in nb.prange(4*N_scan*N_scan):
-            #     out[2][ii] = np.mean(field_far_integrand[ii]) # reuse the array in the memory
-            # out[2] = out[2] * k / (2*np.pi*1j)
+            # out[0, i_out] = sky_to_focal(az_cur)
+            # out[1, i_out] = sky_to_focal(el_cur)
+
+            # integrand =  (Fcomplex * np.exp(1j * k * r) / (4 * np.pi * r))* ((1j * k + 1 / r) * z_dot_rhat + 1j * k * k_z)
+            # out[2, i_out] = np.exp(-1j * r_phref * k) * np.mean(integrand) 
+
+            field_far_integrand = Fcomplex * np.exp(1j * k * r) * z_dot_rhat  / (r * pathl)
+            out[2, i_out] = np.mean(field_far_integrand) * k / (2*np.pi*1j)
 
     return out
 
@@ -216,9 +226,9 @@ def far_field_sim(ap_field, msmt_geo, rx):
     y_tow = msmt_geo.y_tow
     z_tow = msmt_geo.z_tow
 
-    x_phref = msmt_geo.x_phref
-    y_phref = msmt_geo.y_phref
-    z_phref = msmt_geo.z_phref
+    # x_phref = msmt_geo.x_phref
+    # y_phref = msmt_geo.y_phref
+    # z_phref = msmt_geo.z_phref
 
     x_rotc = msmt_geo.x_rotc
     y_rotc = msmt_geo.y_rotc
@@ -226,7 +236,12 @@ def far_field_sim(ap_field, msmt_geo, rx):
 
     el0 = msmt_geo.el0
     az0 = msmt_geo.az0
-    return far_field_sim_jit(ap_field, N_scan, de_ang,lambda_,x_tow,y_tow,z_tow,x_phref,y_phref,z_phref,x_rotc,y_rotc,z_rotc,el0,az0,rx)
+    return far_field_sim_jit(ap_field, 
+                             N_scan, de_ang,lambda_,
+                             x_tow,y_tow,z_tow,
+                             #   x_phref,y_phref,z_phref,
+                             x_rotc,y_rotc,z_rotc,
+                             el0,az0,rx)
 
 if __name__ == "__main__":
     import time

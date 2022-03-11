@@ -18,7 +18,7 @@ if module_path not in sys.path:
     sys.path.append(module_path)
 # # from DEFAULTS import PARENT_PATH
 import sim.tele_geo_ar as tg
-from numerical.root_finder import bisection, brentq, brentq_arg, bisection_arg
+from utility.root_finder import bisection, brentq, brentq_arg, bisection_arg
 
 import sim.pan_mod_ar as pm
 from sim.pan_mod_ar import *
